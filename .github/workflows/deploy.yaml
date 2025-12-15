@@ -1,0 +1,51 @@
+name: COBL-004 Automated Deployment
+
+# Trigger workflow on push to main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1   # Change if needed
+
+      # Step 3: Deploy CloudFormation stack
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file cloudformation/simple-iac.yaml \
+            --stack-name cobl004-demo-stack \
+            --capabilities CAPABILITY_IAM \
+            --no-fail-on-empty-changeset
+
+      # Step 4: Output stack information
+      - name: Retrieve Stack Outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name cobl004-demo-stack \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+      # Step 5: Optional - test Lambda function
+      - name: Test Lambda invocation
+        run: |
+          FUNCTION_NAME=$(aws cloudformation describe-stacks \
+            --stack-name cobl004-demo-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='LambdaName'].OutputValue" \
+            --output text)
+          aws lambda invoke --function-name $FUNCTION_NAME output.txt
+          cat output.txt
